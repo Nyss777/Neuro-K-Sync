@@ -1,4 +1,5 @@
 import os
+import zipfile
 from pathlib import Path
 from typing import cast
 
@@ -8,7 +9,7 @@ from create_hjsons import create_payload_from_dict
 from engraver import engrave_payload, get_all_mp3
 from hash_mutagen import get_audio_hash
 
-LIVE_ARCHIVE_PATH = r'C:\Users\Nyss\Downloads\Anywhere Else'
+LIVE_ARCHIVE_PATH = r'C:\Users\Nyss\Downloads\testt'
 LOCAL_REPO_LOCATION_PATH = r"C:\Users\Nyss\Documents\Code\Metadata Sync"
 
 def get_all_hjson(directory: str) -> list[str]: 
@@ -22,33 +23,39 @@ def get_changed_files() -> None:
     # make a get_zip instead
     return
 
-def get_metadata(hjson_path: str) -> ( dict[str, (str | int | float)] | None ):
+def get_metadata_from_zip(zip_ref: zipfile.ZipFile, hjson_path: str) -> ( dict[str, (str | int | float)] | None ):
     # 1. Load the HJSON metadata
-    try:
-        with open(hjson_path, 'r', encoding='utf-8') as f:
-            metadata = cast(dict[str, (str | int | float)], hjson.load(f))
-        return metadata
+    # try:
+    with zip_ref.open(hjson_path, 'r') as f:
+        content = f.read().decode('utf-8')
+        metadata = cast(dict[str, (str | int | float)], hjson.loads(content))
+    return metadata
 
-    except Exception:
-        print(f"Unable to process metadata for {os.path.basename(hjson_path)}!")
-        return None
+    # except Exception:
+    #     print(f"Unable to process metadata for {os.path.basename(hjson_path)}!")
+    #     return None
 
 
 if __name__ == "__main__":
 
-    os.chdir(LOCAL_REPO_LOCATION_PATH)
+    # os.chdir(LOCAL_REPO_LOCATION_PATH)
     
     # changed_files = get_changed_files()
     # print(f"Number of changes: {len(changed_files)}")
     # print(f"DIF-TREE RESPONSE: {changed_files}")
 
     ## PLACEHOLDER
-    changed_files = get_all_hjson(LOCAL_REPO_LOCATION_PATH)
+    with zipfile.ZipFile("zipped_metadata.zip") as zip_ref:
+        changed_files = zip_ref.namelist()
 
-    lookup_table = {metadata["xxHash"] : metadata
-                    for file_path in changed_files
-                    if file_path.endswith('.hjson')
-                    and (metadata := get_metadata(file_path))}
+        lookup_table = {metadata["xxHash"] : metadata
+                        for file_path in changed_files
+                        if file_path.endswith('.hjson')
+                        and (metadata := get_metadata_from_zip(zip_ref, file_path))}
+
+    # print(f"Number of changes: {len(changed_files)}")
+    # print(f"DIF-TREE RESPONSE: {changed_files}")
+
 
     song_files = get_all_mp3(LIVE_ARCHIVE_PATH)
     print(f"Songs Found: {len(song_files)}")
@@ -67,13 +74,14 @@ if __name__ == "__main__":
         hjson_data = lookup_table.get(xxhash_value)
 
         if not hjson_data:
+            print(f"no json data for {song_path}")
             continue
         
         copy = False
         for key in hjson_data:
-            if song_data[key] != str(hjson_data[key]):
+            if song_data.get(key, "") != str(hjson_data[key]):
                 copy = True
-                print(f"They differ in {key}; {song_data[key]} vs {hjson_data[key]}")
+                print(f"They differ in {key}; {song_data.get(key, "")} vs {hjson_data[key]}")
 
         if copy: 
 
@@ -91,5 +99,18 @@ if __name__ == "__main__":
             set_tags(song_path, song_obj, None, None) ## side-effect
 
             if song_obj.filename != os.path.basename(song_path):
-                renamed_path = os.path.join(os.path.dirname(song_path), song_obj.filename)
+                renamed_path = Path(os.path.join(os.path.dirname(song_path), song_obj.filename))
+                tries = 0
+
+                while renamed_path.is_file():
+                    if tries:
+                        new_stem = renamed_path.stem[:-(len(str(tries)) + 2)] + f"({tries})"
+                        tries += 1
+                        
+                    else:
+                        tries += 1
+                        new_stem = renamed_path.stem + ' (1)'
+
+                    renamed_path = renamed_path.with_stem(new_stem)
+
                 os.rename(src=song_path, dst=renamed_path) ## side-effect
