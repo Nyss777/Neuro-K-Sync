@@ -76,7 +76,6 @@ if __name__ == "__main__":
         xxhash_value = song_data.get("xxHash", None) ## If this is too slow maybe use regex on the payload
 
         if not xxhash_value:
-            print("Generating Hash")
             xxhash_value = get_audio_hash(song_path)
         if not xxhash_value:
             print(f"Unable to get xxhash for {song_path}")
@@ -91,7 +90,7 @@ if __name__ == "__main__":
         
         copy = False
         for key in hjson_data_struct.metadata:
-            if song_data[key] != str(hjson_data_struct.metadata[key]):
+            if song_data.get(key, "") != str(hjson_data_struct.metadata[key]):
                 copy = True
                 print(f"They differ in {key}; {song_data[key]} vs {hjson_data_struct.metadata[key]}")
 
@@ -126,6 +125,7 @@ if __name__ == "__main__":
 
     seen_hjson_count = sum(1 for hjson_struct in lookup_table.values() if hjson_struct.seen is True) 
     print(f"Seen hjson files: {seen_hjson_count} < {(len(lookup_table) - 150)}") 
+
     if seen_hjson_count < (len(lookup_table) - 150):
         print("Missing files!")
 
