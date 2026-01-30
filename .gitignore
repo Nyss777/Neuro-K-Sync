@@ -10,6 +10,9 @@ __pycache__/
 # Ignore log files (like the sync [date].log you created earlier!)
 *.log
 
+# Ignore data zip
+*.zip
+
 # Ignore OS-specific system files
 .DS_Store
 Thumbs.db
