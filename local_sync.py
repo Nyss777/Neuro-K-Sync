@@ -1,6 +1,7 @@
 import io
 import os
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -45,6 +46,10 @@ def get_metadata_from_zip(zip_ref: zipfile.ZipFile, hjson_path: str) -> dict[str
     #     print(f"Unable to process metadata for {os.path.basename(hjson_path)}!")
     #     return None
 
+@dataclass
+class Hjson_Struct:
+    metadata: dict[str, str | int | float]
+    seen: bool
 
 if __name__ == "__main__":
 
@@ -57,10 +62,10 @@ if __name__ == "__main__":
     with zipfile.ZipFile(zip_data) as zip_ref:
         changed_files = zip_ref.namelist()
 
-        lookup_table = {metadata["xxHash"] : metadata
-                        for file_path in changed_files
-                        if file_path.endswith('.hjson')
-                        and (metadata := get_metadata_from_zip(zip_ref, file_path))}
+        lookup_table = {metadata["xxHash"] : Hjson_Struct(metadata=metadata, seen=False)
+                            for file_path in changed_files
+                            if file_path.endswith('.hjson')
+                            and (metadata := get_metadata_from_zip(zip_ref, file_path))}
 
     song_files = get_all_mp3(LIVE_ARCHIVE_PATH)
     print(f"Songs Found: {len(song_files)}")
@@ -71,28 +76,30 @@ if __name__ == "__main__":
         xxhash_value = song_data.get("xxHash", None) ## If this is too slow maybe use regex on the payload
 
         if not xxhash_value:
+            print("Generating Hash")
             xxhash_value = get_audio_hash(song_path)
         if not xxhash_value:
             print(f"Unable to get xxhash for {song_path}")
             continue
         
-        hjson_data = lookup_table.get(xxhash_value)
+        hjson_data_struct = lookup_table.get(xxhash_value)
 
-        if not hjson_data:
-            print(f"no json data for {song_path}")
+        if hjson_data_struct is None:
             continue
+        else:
+            hjson_data_struct.seen = True
         
         copy = False
-        for key in hjson_data:
-            if song_data.get(key, "") != str(hjson_data[key]):
+        for key in hjson_data_struct.metadata:
+            if song_data[key] != str(hjson_data_struct.metadata[key]):
                 copy = True
-                print(f"They differ in {key}; {song_data.get(key, "")} vs {hjson_data[key]}")
+                print(f"They differ in {key}; {song_data[key]} vs {hjson_data_struct.metadata[key]}")
 
         if copy: 
 
             file_path = Path(song_path)
 
-            new_payload = create_payload_from_dict(hjson_data=hjson_data, song_path=song_path, filename=file_path.stem)
+            new_payload = create_payload_from_dict(hjson_data=hjson_data_struct.metadata, song_path=song_path, filename=file_path.stem)
             engrave_payload(path=song_path, song_data=new_payload) ## side-effect
 
             song_obj = Song(song_path)
@@ -116,3 +123,14 @@ if __name__ == "__main__":
                     renamed_path = renamed_path.with_stem(new_stem)
 
                 os.rename(src=song_path, dst=renamed_path) ## side-effect
+
+    seen_hjson_count = sum(1 for hjson_struct in lookup_table.values() if hjson_struct.seen is True) 
+    print(f"Seen hjson files: {seen_hjson_count} < {(len(lookup_table) - 150)}") 
+    if seen_hjson_count < (len(lookup_table) - 150):
+        print("Missing files!")
+
+    else:
+        for hjson_struct in lookup_table.values():
+            if hjson_struct.seen is False:
+                pass
+                print(f"Missing {hjson_struct.metadata.get("Title", "")}")
