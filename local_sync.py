@@ -1,9 +1,11 @@
+import io
 import os
 import zipfile
 from pathlib import Path
 from typing import cast
 
 import hjson
+import requests
 from CF_Program import Song, get_song_data, process_new_tags, set_tags
 from create_hjsons import create_payload_from_dict
 from engraver import engrave_payload, get_all_mp3
@@ -19,16 +21,24 @@ def get_all_hjson(directory: str) -> list[str]:
     p = Path(directory)
     return [(str(f)) for f in p.rglob('*.hjson') if f.is_file()]
 
-def get_changed_files() -> None:
-    # make a get_zip instead
-    return
+def get_remote_zip() -> io.BytesIO | None:
+    url = "https://github.com/Nyss777/Neuro-Karaoke-Archive-Metadata/raw/main/zipped_metadata.zip"
+    response = requests.get(url)
 
-def get_metadata_from_zip(zip_ref: zipfile.ZipFile, hjson_path: str) -> ( dict[str, (str | int | float)] | None ):
+    if response.status_code == 200:
+        # Wrap the bytes in a "BytesIO" object
+        zip_in_memory = io.BytesIO(response.content)
+        
+        return zip_in_memory
+    
+    return None
+
+def get_metadata_from_zip(zip_ref: zipfile.ZipFile, hjson_path: str) -> dict[str, str|int|float] | None:
     # 1. Load the HJSON metadata
     # try:
     with zip_ref.open(hjson_path, 'r') as f:
         content = f.read().decode('utf-8')
-        metadata = cast(dict[str, (str | int | float)], hjson.loads(content))
+        metadata = cast(dict[str, str|int|float], hjson.loads(content))
     return metadata
 
     # except Exception:
@@ -38,24 +48,19 @@ def get_metadata_from_zip(zip_ref: zipfile.ZipFile, hjson_path: str) -> ( dict[s
 
 if __name__ == "__main__":
 
-    # os.chdir(LOCAL_REPO_LOCATION_PATH)
-    
-    # changed_files = get_changed_files()
-    # print(f"Number of changes: {len(changed_files)}")
-    # print(f"DIF-TREE RESPONSE: {changed_files}")
+    zip_data = get_remote_zip()
 
-    ## PLACEHOLDER
-    with zipfile.ZipFile("zipped_metadata.zip") as zip_ref:
+    if zip_data is None:
+        print("Failed to retrieve zip data.")
+        exit()        
+
+    with zipfile.ZipFile(zip_data) as zip_ref:
         changed_files = zip_ref.namelist()
 
         lookup_table = {metadata["xxHash"] : metadata
                         for file_path in changed_files
                         if file_path.endswith('.hjson')
                         and (metadata := get_metadata_from_zip(zip_ref, file_path))}
-
-    # print(f"Number of changes: {len(changed_files)}")
-    # print(f"DIF-TREE RESPONSE: {changed_files}")
-
 
     song_files = get_all_mp3(LIVE_ARCHIVE_PATH)
     print(f"Songs Found: {len(song_files)}")
@@ -85,12 +90,9 @@ if __name__ == "__main__":
 
         if copy: 
 
-            # this will be different for actual use
-            # no backup
-            filename = os.path.basename(song_path)
-            parent = os.path.basename(os.path.dirname(song_path))
+            file_path = Path(song_path)
 
-            new_payload = create_payload_from_dict(hjson_data=hjson_data, song_path=song_path, filename=filename)
+            new_payload = create_payload_from_dict(hjson_data=hjson_data, song_path=song_path, filename=file_path.stem)
             engrave_payload(path=song_path, song_data=new_payload) ## side-effect
 
             song_obj = Song(song_path)
@@ -98,8 +100,8 @@ if __name__ == "__main__":
 
             set_tags(song_path, song_obj, None, None) ## side-effect
 
-            if song_obj.filename != os.path.basename(song_path):
-                renamed_path = Path(os.path.join(os.path.dirname(song_path), song_obj.filename))
+            if song_obj.filename != file_path.stem:
+                renamed_path = file_path.parent / song_obj.filename
                 tries = 0
 
                 while renamed_path.is_file():
