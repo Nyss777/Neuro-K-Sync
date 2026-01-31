@@ -17,15 +17,7 @@ from engraver import engrave_payload, get_all_mp3
 from file_manager import FileManager
 from hash_mutagen import get_audio_hash
 
-LIVE_ARCHIVE_PATH = r'C:\Users\Nyss\Downloads\testt'
 LOCAL_REPO_LOCATION_PATH = r"C:\Users\Nyss\Documents\Code\Metadata Sync"
-
-def get_all_json(directory: Path | str) -> list[str]: 
-    """
-    Function that gathers all hjson files from a directory.
-    """
-    p = Path(directory)
-    return [(str(f)) for f in p.rglob('*.json') if f.is_file()]
 
 def format_tags(file_path: str, script_dir: Path, song_obj: Song) -> None:
     if not DF_format(file_path, script_dir):
@@ -35,7 +27,6 @@ def DF_format (file_path: str, script_dir: Path) -> bool:
     """
     Function for formatting a song with a DF preset
     """
-    return False
     presets = get_all_json(script_dir)
 
     if not presets:
@@ -52,12 +43,12 @@ def DF_format (file_path: str, script_dir: Path) -> bool:
     finally:
         return True
 
-def get_all_hjson(directory: str) -> list[str]: 
+def get_all_json(directory: Path | str) -> list[str]: 
     """
     Function that gathers all hjson files from a directory.
     """
     p = Path(directory)
-    return [(str(f)) for f in p.rglob('*.hjson') if f.is_file()]
+    return [(str(f)) for f in p.rglob('*.json') if f.is_file()]
 
 def get_remote_zip() -> io.BytesIO | None:
     url = "https://github.com/Nyss777/Neuro-Karaoke-Archive-Metadata/raw/main/zipped_metadata.zip"
@@ -83,6 +74,36 @@ def get_metadata_from_zip(zip_ref: zipfile.ZipFile, hjson_path: str) -> dict[str
         print(f"Unable to process metadata for {os.path.basename(hjson_path)}!")
         return None
 
+def setup_parser() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Neuro Karaoke Archive metadata synchronizer.") 
+    parser.add_argument("--path", type=str, default='', help="Path to Archive")
+
+    return parser.parse_args()
+
+def get_songs_directory(path_config_file: Path) -> Path | None:
+
+    ### Priority list:
+    # 1. args.path
+    # 2. config
+    # 3. window selection
+
+    if args.path and (arg_path := Path(args.path)).is_dir():
+        return arg_path
+
+    elif path_config_file.exists():
+        with open(path_config_file, 'r', encoding='utf-8') as h:
+            config_content = h.read()
+        if (config_path := Path(config_content)).is_dir():
+            return config_path
+    
+    else:
+        print("No path configuration found, loading selection window")
+        selected = folder_selection_dialog()
+        if selected is not None and (selected_path := Path(selected)).is_dir():
+            return selected_path
+            
+    return None
+
 def folder_selection_dialog() -> str | None:
         """Opens a file selection dialog and returns the selected file path."""
 
@@ -95,12 +116,6 @@ def folder_selection_dialog() -> str | None:
             return folder_path
         else:
             print("No folder path selected")
-
-def setup_parser() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Neuro Karaoke Archive metadata synchronizer.") 
-    parser.add_argument("--path", type=str, default='', help="Path to Archive")
-
-    return parser.parse_args()
 
 def save_path(path_config_file: Path, directory: Path) -> None:
     if Path(path_config_file).exists():
@@ -134,39 +149,18 @@ if __name__ == "__main__":
         exit()        
 
     with zipfile.ZipFile(zip_data) as zip_ref:
-        changed_files = zip_ref.namelist()
+        zipped_files = zip_ref.namelist()
 
         lookup_table = {metadata["xxHash"] : Hjson_Struct(metadata=metadata, seen=False)
-                            for file_path in changed_files
-                            if file_path.endswith('.hjson')
-                            and (metadata := get_metadata_from_zip(zip_ref, file_path))}
+                        for file_path in zipped_files
+                        if file_path.endswith('.hjson')
+                        and (metadata := get_metadata_from_zip(zip_ref, file_path))}
 
-    ### Priority list:
-    # 1. args.path
-    # 2. config
-    # 3. window selection
-    # if not args.path:
-        # open selection windows
-
-    songs_directory_path = "placeholder"
     path_config_file = script_dir / "path_config.txt"
 
-    if args.path and (arg_path := Path(args.path)).is_dir():
-        songs_directory_path = arg_path 
+    songs_directory_path = get_songs_directory(script_dir)
 
-    elif path_config_file.exists():
-        with open(path_config_file, 'r', encoding='utf-8') as h:
-            config_content = h.read()
-        if (config_path := Path(config_content)).is_dir():
-            songs_directory_path = config_path
-    
-    else:
-        print("No path configuration found, loading selection window")
-        selected = folder_selection_dialog()
-        if selected is not None and (selected_path := Path(selected)).is_dir():
-            songs_directory_path = selected_path
-
-    if songs_directory_path == "placeholder":
+    if songs_directory_path is None:
         print("Unable to retrieve path information, ending program")
         exit()
 
@@ -232,10 +226,9 @@ if __name__ == "__main__":
     print(f"Seen hjson files: {seen_hjson_count} < {(len(lookup_table) - 150)}") 
 
     if seen_hjson_count < (len(lookup_table) - 150):
-        print("Missing files!")
+        print("Some files are missing.")
 
     else:
         for hjson_struct in lookup_table.values():
             if hjson_struct.seen is False:
-                pass
                 print(f"Missing {hjson_struct.metadata.get("Title", "")}")
