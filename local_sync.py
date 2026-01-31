@@ -104,7 +104,7 @@ if __name__ == "__main__":
             song_obj = Song(song_path)
             process_new_tags(song_obj)
 
-            set_tags(song_path, song_obj, None, None) ## side-effect
+            set_tags(song_path, song_obj, None, None) ## side-effect ### formating point
 
             if song_obj.filename != file_path.stem:
                 renamed_path = file_path.parent / song_obj.filename

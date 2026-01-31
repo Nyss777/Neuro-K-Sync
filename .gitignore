@@ -13,6 +13,9 @@ __pycache__/
 # Ignore data zip
 *.zip
 
+# Ignore presets
+*.json
+
 # Ignore OS-specific system files
 .DS_Store
 Thumbs.db
