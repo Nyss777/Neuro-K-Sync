@@ -1,9 +1,11 @@
+import argparse
 import io
 import os
 import sys
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from tkinter import filedialog
 from typing import cast
 
 import hjson
@@ -25,23 +27,15 @@ def get_all_json(directory: Path | str) -> list[str]:
     p = Path(directory)
     return [(str(f)) for f in p.rglob('*.json') if f.is_file()]
 
-def format_tags(path: str, song_obj: Song) -> None:
-    if not DF_format(path):
+def format_tags(file_path: str, script_dir: Path, song_obj: Song) -> None:
+    if not DF_format(file_path, script_dir):
         set_tags(song_path, song_obj, None, None)
 
-def DF_format (file_path: str) -> bool:
+def DF_format (file_path: str, script_dir: Path) -> bool:
     """
     Function for formatting a song with a DF preset
     """
-
-    if getattr(sys, 'frozen', False):
-        script_dir = Path(sys.executable).parent
-    else:
-        script_dir = Path(__file__).parent.absolute()
-
-    if not script_dir.is_dir():
-        return False
-
+    return False
     presets = get_all_json(script_dir)
 
     if not presets:
@@ -89,12 +83,49 @@ def get_metadata_from_zip(zip_ref: zipfile.ZipFile, hjson_path: str) -> dict[str
         print(f"Unable to process metadata for {os.path.basename(hjson_path)}!")
         return None
 
+def folder_selection_dialog() -> str | None:
+        """Opens a file selection dialog and returns the selected file path."""
+
+        folder_path = filedialog.askdirectory(
+            title="Select a Destination Folder",
+            initialdir="/"
+        )
+        if folder_path:
+            print(f"Selected folder path: {folder_path}")
+            return folder_path
+        else:
+            print("No folder path selected")
+
+def setup_parser() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Neuro Karaoke Archive metadata synchronizer.") 
+    parser.add_argument("--path", type=str, default='', help="Path to Archive")
+
+    return parser.parse_args()
+
+def save_path(path_config_file: Path, directory: Path) -> None:
+    if Path(path_config_file).exists():
+        with open(path_config_file, 'r+', encoding='utf-8') as h:
+            content = h.read()
+            if Path(content) == directory:
+                return
+
+    with open(path_config_file, 'w', encoding='utf-8') as h:
+        h.write(str(directory))
+
 @dataclass
 class Hjson_Struct:
     metadata: dict[str, str | int | float]
     seen: bool
 
 if __name__ == "__main__":
+
+    if getattr(sys, 'frozen', False):
+        script_dir = Path(sys.executable).parent
+    else:
+        script_dir = Path(__file__).parent.absolute()
+
+
+    args = setup_parser()
 
     zip_data = get_remote_zip()
 
@@ -110,7 +141,38 @@ if __name__ == "__main__":
                             if file_path.endswith('.hjson')
                             and (metadata := get_metadata_from_zip(zip_ref, file_path))}
 
-    song_files = get_all_mp3(LIVE_ARCHIVE_PATH)
+    ### Priority list:
+    # 1. args.path
+    # 2. config
+    # 3. window selection
+    # if not args.path:
+        # open selection windows
+
+    songs_directory_path = "placeholder"
+    path_config_file = script_dir / "path_config.txt"
+
+    if args.path and (arg_path := Path(args.path)).is_dir():
+        songs_directory_path = arg_path 
+
+    elif path_config_file.exists():
+        with open(path_config_file, 'r', encoding='utf-8') as h:
+            config_content = h.read()
+        if (config_path := Path(config_content)).is_dir():
+            songs_directory_path = config_path
+    
+    else:
+        print("No path configuration found, loading selection window")
+        selected = folder_selection_dialog()
+        if selected is not None and (selected_path := Path(selected)).is_dir():
+            songs_directory_path = selected_path
+
+    if songs_directory_path == "placeholder":
+        print("Unable to retrieve path information, ending program")
+        exit()
+
+    save_path(path_config_file, songs_directory_path)
+
+    song_files = get_all_mp3(songs_directory_path)
     print(f"Songs Found: {len(song_files)}")
 
     for song_path in song_files:
@@ -147,7 +209,7 @@ if __name__ == "__main__":
             song_obj = Song(song_path)
             process_new_tags(song_obj)
 
-            format_tags(song_path, song_obj) ## side-effect
+            format_tags(song_path, script_dir, song_obj) ## side-effect
 
             if song_obj.filename != file_path.stem: ### have to figure out DF renaming
                 renamed_path = file_path.parent / song_obj.filename

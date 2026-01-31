@@ -13,6 +13,9 @@ __pycache__/
 # Ignore data zip
 *.zip
 
+# ignore path config
+*.txt
+
 # Ignore presets
 *.json
 
