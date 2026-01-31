@@ -5,7 +5,6 @@ import sys
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from tkinter import filedialog
 from typing import cast
 
 import hjson
@@ -17,7 +16,6 @@ from engraver import engrave_payload, get_all_mp3
 from file_manager import FileManager
 from hash_mutagen import get_audio_hash
 
-LOCAL_REPO_LOCATION_PATH = r"C:\Users\Nyss\Documents\Code\Metadata Sync"
 
 def format_tags(file_path: str, script_dir: Path, song_obj: Song) -> None:
     if not DF_format(file_path, script_dir):
@@ -80,7 +78,7 @@ def setup_parser() -> argparse.Namespace:
 
     return parser.parse_args()
 
-def get_songs_directory(path_config_file: Path) -> Path | None:
+def get_songs_directory(path_config_file: Path, args: argparse.Namespace) -> Path | None:
 
     ### Priority list:
     # 1. args.path
@@ -105,17 +103,31 @@ def get_songs_directory(path_config_file: Path) -> Path | None:
     return None
 
 def folder_selection_dialog() -> str | None:
-        """Opens a file selection dialog and returns the selected file path."""
+
+    """Opens a file selection dialog and returns the selected file path."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
 
         folder_path = filedialog.askdirectory(
-            title="Select a Destination Folder",
-            initialdir="/"
+            title="Select the Neuro songs location",
+            initialdir=os.getcwd()
         )
+
+        root.destroy()
+
         if folder_path:
             print(f"Selected folder path: {folder_path}")
             return folder_path
         else:
             print("No folder path selected")
+
+    except ImportError:
+        print("\nGUI selection unavailable (Tkinter not found).\n Please pass the path as an argument!")
+        return None
 
 def save_path(path_config_file: Path, directory: Path) -> None:
     if Path(path_config_file).exists():
@@ -158,7 +170,7 @@ if __name__ == "__main__":
 
     path_config_file = script_dir / "path_config.txt"
 
-    songs_directory_path = get_songs_directory(script_dir)
+    songs_directory_path = get_songs_directory(path_config_file, args)
 
     if songs_directory_path is None:
         print("Unable to retrieve path information, ending program")
@@ -207,18 +219,12 @@ if __name__ == "__main__":
 
             if song_obj.filename != file_path.stem: ### have to figure out DF renaming
                 renamed_path = file_path.parent / song_obj.filename
-                tries = 0
+                rename_counter = 1
+                base_name = song_obj.filename
 
                 while renamed_path.is_file():
-                    if tries:
-                        new_stem = renamed_path.stem[:-(len(str(tries)) + 2)] + f"({tries})"
-                        tries += 1
-                        
-                    else:
-                        tries += 1
-                        new_stem = renamed_path.stem + ' (1)'
-
-                    renamed_path = renamed_path.with_stem(new_stem)
+                    renamed_path = file_path.parent / f"{base_name} ({rename_counter}){file_path.suffix}"
+                    rename_counter += 1
 
                 os.rename(src=song_path, dst=renamed_path) ## side-effect
 
