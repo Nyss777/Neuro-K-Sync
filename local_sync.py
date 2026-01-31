@@ -1,9 +1,11 @@
 import argparse
 import io
+import logging
 import os
 import sys
 import zipfile
 from dataclasses import dataclass
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import cast
 
@@ -34,8 +36,8 @@ def DF_format (file_path: str, script_dir: Path) -> bool:
         preset = load_preset(presets[0])
         apply_in_background(file_path=file_path, fm=FileManager(), preset=preset)
 
-    except Exception as e:
-        print(e)
+    except Exception:
+        logger.exception("Unable to format with preset!")
         return False
 
     finally:
@@ -50,14 +52,32 @@ def get_all_json(directory: Path | str) -> list[str]:
 
 def get_remote_zip() -> io.BytesIO | None:
     url = "https://github.com/Nyss777/Neuro-Karaoke-Archive-Metadata/raw/main/zipped_metadata.zip"
-    response = requests.get(url)
 
-    if response.status_code == 200:
-        # Wrap the bytes in a "BytesIO" object
-        zip_in_memory = io.BytesIO(response.content)
-        
-        return zip_in_memory
-    
+    try:    
+
+        response = requests.get(url)
+
+        response.raise_for_status()
+
+        if response.status_code == 200:
+            # Wrap the bytes in a "BytesIO" object
+            zip_in_memory = io.BytesIO(response.content)
+            
+            return zip_in_memory
+
+    except requests.exceptions.HTTPError as err:
+        status_code = err.response.status_code if err.response is not None else "Unknown"
+        logger.error(f"Http Error: {status_code}")
+
+    except requests.exceptions.ConnectionError:
+        logger.exception("Error Connecting")
+
+    except requests.exceptions.Timeout:
+        logger.exception("Timeout Error")
+
+    except requests.exceptions.RequestException:
+        logger.exception("An Error Happened")
+
     return None
 
 def get_metadata_from_zip(zip_ref: zipfile.ZipFile, hjson_path: str) -> dict[str, str|int|float] | None:
@@ -69,14 +89,8 @@ def get_metadata_from_zip(zip_ref: zipfile.ZipFile, hjson_path: str) -> dict[str
         return metadata
 
     except Exception:
-        print(f"Unable to process metadata for {os.path.basename(hjson_path)}!")
+        logger.exception(f"Unable to process metadata for {os.path.basename(hjson_path)}!")
         return None
-
-def setup_parser() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Neuro Karaoke Archive metadata synchronizer.") 
-    parser.add_argument("--path", type=str, default='', help="Path to Archive")
-
-    return parser.parse_args()
 
 def get_songs_directory(path_config_file: Path, args: argparse.Namespace) -> Path | None:
 
@@ -89,13 +103,16 @@ def get_songs_directory(path_config_file: Path, args: argparse.Namespace) -> Pat
         return arg_path
 
     elif path_config_file.exists():
-        with open(path_config_file, 'r', encoding='utf-8') as h:
-            config_content = h.read()
-        if (config_path := Path(config_content)).is_dir():
-            return config_path
+        try:
+            with open(path_config_file, 'r', encoding='utf-8') as h:
+                config_content = h.read()
+            if (config_path := Path(config_content)).is_dir():
+                return config_path
+        except PermissionError:
+            logger.error("Permission Error. Unable to load path_config.txt")
     
     else:
-        print("No path configuration found, loading selection window")
+        logger.debug("No path configuration found, loading selection window")
         selected = folder_selection_dialog()
         if selected is not None and (selected_path := Path(selected)).is_dir():
             return selected_path
@@ -120,24 +137,59 @@ def folder_selection_dialog() -> str | None:
         root.destroy()
 
         if folder_path:
-            print(f"Selected folder path: {folder_path}")
+            logger.debug(f"Selected folder path: {folder_path}")
             return folder_path
         else:
-            print("No folder path selected")
+            logger.info("No folder path selected")
 
     except ImportError:
-        print("\nGUI selection unavailable (Tkinter not found).\n Please pass the path as an argument!")
+        logger.critical("\nGUI selection unavailable (Tkinter not found).\n Please pass the path as an argument!")
         return None
 
 def save_path(path_config_file: Path, directory: Path) -> None:
-    if Path(path_config_file).exists():
-        with open(path_config_file, 'r+', encoding='utf-8') as h:
-            content = h.read()
-            if Path(content) == directory:
-                return
+    try:
+        if Path(path_config_file).exists():
+            with open(path_config_file, 'r+', encoding='utf-8') as h:
+                content = h.read()
+                if Path(content) == directory:
+                    return
 
-    with open(path_config_file, 'w', encoding='utf-8') as h:
-        h.write(str(directory))
+        with open(path_config_file, 'w', encoding='utf-8') as h:
+            h.write(str(directory))
+    except PermissionError:
+        logger.error("Permission Error. Unable to save path to disk.")
+
+def setup_logger():
+
+    logger = logging.getLogger()
+
+    script_dir = Path(__file__).parent.absolute()
+
+    log_path = script_dir / 'sync_log.txt'
+
+    logger.setLevel(logging.DEBUG)
+
+    file_formatter = logging.Formatter('[%(asctime)s] %(levelname)s:%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    shell_formatter = logging.Formatter('%(levelname)s:%(message)s')
+
+    file_handler = RotatingFileHandler(log_path, maxBytes=5_242_880, backupCount=3, encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(file_formatter)
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(shell_formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+    return logger
+
+def setup_parser() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Neuro Karaoke Archive metadata synchronizer.") 
+    parser.add_argument("--path", type=str, default='', help="Path to Archive")
+
+    return parser.parse_args()
+
 
 @dataclass
 class Hjson_Struct:
@@ -151,13 +203,14 @@ if __name__ == "__main__":
     else:
         script_dir = Path(__file__).parent.absolute()
 
+    logger = logging.getLogger("Neuro K Archive Sync")
 
     args = setup_parser()
 
     zip_data = get_remote_zip()
 
     if zip_data is None:
-        print("Failed to retrieve zip data.")
+        logger.critical("Failed to retrieve zip data.")
         exit()        
 
     with zipfile.ZipFile(zip_data) as zip_ref:
@@ -173,13 +226,17 @@ if __name__ == "__main__":
     songs_directory_path = get_songs_directory(path_config_file, args)
 
     if songs_directory_path is None:
-        print("Unable to retrieve path information, ending program")
+        logger.critical("Unable to retrieve path information, ending program")
         exit()
 
     save_path(path_config_file, songs_directory_path)
 
     song_files = get_all_mp3(songs_directory_path)
-    print(f"Songs Found: {len(song_files)}")
+    if len(song_files) > 0:
+        logger.info(f"Songs Found: {len(song_files)}")
+    else:
+        logger.critical("No song files found, please verify path")
+        exit()
 
     for song_path in song_files:
         payload, song_data, _ = get_song_data(song_path)
@@ -189,7 +246,7 @@ if __name__ == "__main__":
         if not xxhash_value:
             xxhash_value = get_audio_hash(song_path)
         if not xxhash_value:
-            print(f"Unable to get xxhash for {song_path}")
+            logger.warning(f"Unable to get xxhash for {song_path}")
             continue
         
         hjson_data_struct = lookup_table.get(xxhash_value)
@@ -203,7 +260,7 @@ if __name__ == "__main__":
         for key in hjson_data_struct.metadata:
             if song_data.get(key, "") != str(hjson_data_struct.metadata[key]):
                 copy = True
-                print(f"They differ in {key}; {song_data.get(key, "")} vs {hjson_data_struct.metadata[key]}")
+                break
 
         if copy: 
 
@@ -217,7 +274,7 @@ if __name__ == "__main__":
 
             format_tags(song_path, script_dir, song_obj) ## side-effect
 
-            if song_obj.filename != file_path.stem: ### have to figure out DF renaming
+            if song_obj.filename != file_path.stem:
                 renamed_path = file_path.parent / song_obj.filename
                 rename_counter = 1
                 base_name = song_obj.filename
@@ -229,12 +286,16 @@ if __name__ == "__main__":
                 os.rename(src=song_path, dst=renamed_path) ## side-effect
 
     seen_hjson_count = sum(1 for hjson_struct in lookup_table.values() if hjson_struct.seen is True) 
-    print(f"Seen hjson files: {seen_hjson_count} < {(len(lookup_table) - 150)}") 
+
 
     if seen_hjson_count < (len(lookup_table) - 150):
-        print("Some files are missing.")
+        logger.info("Many files are missing. If this is intentional, feel free to ignore this message")
+
+    elif all((struct.seen for struct in lookup_table.values())):
+        logger.info("Your archive is fully up to date!")
 
     else:
+        logger.info("Some files are missing, check the log file for details.")
         for hjson_struct in lookup_table.values():
             if hjson_struct.seen is False:
-                print(f"Missing {hjson_struct.metadata.get("Title", "")}")
+                logger.debug(f"Missing {hjson_struct.metadata.get("Track", "")} {hjson_struct.metadata.get("Title", "")}")
