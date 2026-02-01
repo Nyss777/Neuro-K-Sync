@@ -34,21 +34,24 @@ def DF_format (file_path: str, script_dir: Path) -> bool:
 
     try :
         preset = load_preset(presets[0])
+
+        if preset is None:
+            return False
+
         apply_in_background(file_path=file_path, fm=FileManager(), preset=preset)
 
     except Exception:
         logger.exception("Unable to format with preset!")
         return False
 
-    finally:
+    else:
         return True
 
-def get_all_json(directory: Path | str) -> list[str]: 
+def get_all_json(p: Path) -> list[Path]: 
     """
-    Function that gathers all hjson files from a directory.
+    Function that gathers all JSON files from a directory.
     """
-    p = Path(directory)
-    return [(str(f)) for f in p.rglob('*.json') if f.is_file()]
+    return [(f) for f in p.rglob('*.json') if f.is_file()]
 
 def get_remote_zip() -> io.BytesIO | None:
     url = "https://github.com/Nyss777/Neuro-Karaoke-Archive-Metadata/raw/main/zipped_metadata.zip"
@@ -169,8 +172,8 @@ def setup_logger():
 
     logger.setLevel(logging.DEBUG)
 
-    file_formatter = logging.Formatter('[%(asctime)s] %(levelname)s:%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    shell_formatter = logging.Formatter('%(levelname)s:%(message)s')
+    file_formatter = logging.Formatter('[%(asctime)s]%(name)s-%(levelname)s:%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    shell_formatter = logging.Formatter('%(levelname)s: %(message)s')
 
     file_handler = RotatingFileHandler(log_path, maxBytes=5_242_880, backupCount=3, encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
@@ -198,12 +201,16 @@ class Hjson_Struct:
 
 if __name__ == "__main__":
 
+    setup_logger()
+
     if getattr(sys, 'frozen', False):
         script_dir = Path(sys.executable).parent
     else:
         script_dir = Path(__file__).parent.absolute()
 
     logger = logging.getLogger("Neuro K Archive Sync")
+
+    logger.info("Run start")
 
     args = setup_parser()
 
@@ -238,6 +245,7 @@ if __name__ == "__main__":
         logger.critical("No song files found, please verify path")
         exit()
 
+    changed = 0
     for song_path in song_files:
         payload, song_data, _ = get_song_data(song_path)
 
@@ -260,6 +268,7 @@ if __name__ == "__main__":
         for key in hjson_data_struct.metadata:
             if song_data.get(key, "") != str(hjson_data_struct.metadata[key]):
                 copy = True
+                changed += 1
                 break
 
         if copy: 
@@ -275,6 +284,7 @@ if __name__ == "__main__":
             format_tags(song_path, script_dir, song_obj) ## side-effect
 
             if song_obj.filename != file_path.stem:
+                
                 renamed_path = file_path.parent / song_obj.filename
                 rename_counter = 1
                 base_name = song_obj.filename
@@ -287,9 +297,14 @@ if __name__ == "__main__":
 
     seen_hjson_count = sum(1 for hjson_struct in lookup_table.values() if hjson_struct.seen is True) 
 
+    logger.info("Run End")
+    if changed == 0:
+        logger.info("No song was changed")
+    else:
+        logger.info(f"{changed} songs were updated")
 
     if seen_hjson_count < (len(lookup_table) - 150):
-        logger.info("Many files are missing. If this is intentional, feel free to ignore this message")
+        logger.info("Many files are missing. If this is intentional, feel free to ignore this message.")
 
     elif all((struct.seen for struct in lookup_table.values())):
         logger.info("Your archive is fully up to date!")
