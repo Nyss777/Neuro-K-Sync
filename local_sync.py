@@ -13,12 +13,12 @@ from typing import cast
 
 import hjson
 import requests
-from CF_Program import Song, process_new_tags, set_tags_fast
-from create_hjsons import create_payload_from_dict
+from DF_Customizer.file_manager import FileManager
 from DF_formatter import apply_in_background, load_preset
-from engraver import engrave_payload_fast, get_all_mp3, get_raw_json
-from file_manager import FileManager
-from hash_mutagen import get_audio_hash
+from utils.CF_Program import Song, process_new_tags, set_tags_fast
+from utils.create_hjsons import create_payload_from_dict
+from utils.engraver import engrave_payload, get_all_mp3, get_raw_json
+from utils.hash_mutagen import get_audio_hash
 
 
 def format_tags(file_path: str, script_dir: Path, song_obj: Song, preset: dict[str, list[dict[str, str]]] | None) -> None:
@@ -315,37 +315,32 @@ if __name__ == "__main__":
                 break
 
 
-        if copy: # 110 seconds
+        if copy:
 
             file_path = Path(song_path)
 
             new_payload = create_payload_from_dict(hjson_data=hjson_data_struct.metadata, song_path=song_path, filename=file_path.stem)
 
-            engrave_payload_fast(path=song_path, song_data=new_payload) ## side-effect # 4 seconds fast
+            # engrave_payload(path=song_path, song_data=new_payload) ## side-effect
 
             song_obj = Song(song_path)
             process_new_tags(song_obj, song_data=new_song_data)
 
-            format_tags(song_path, script_dir, song_obj, preset) ## side-effect # 64 seconds # 44 for DF # 110 for fast ???
-            ### commented out for testing
-            # if song_obj.filename != file_path.stem:
+            # format_tags(song_path, script_dir, song_obj, preset) ## side-effect
 
-            #     renamed_path = file_path.parent / song_obj.filename
-            #     rename_counter = 1
-            #     base_name = song_obj.filename
+            if song_obj.filename != file_path.stem:
 
-            #     while renamed_path.is_file():
-            #         renamed_path = file_path.parent / f"{base_name} ({rename_counter}){file_path.suffix}"
-            #         rename_counter += 1
+                renamed_path = file_path.parent / song_obj.filename
+                rename_counter = 1
+                base_name = song_obj.filename
 
-            #     os.rename(src=song_path, dst=renamed_path) ## side-effect
+                while renamed_path.is_file():
+                    renamed_path = file_path.parent / f"{base_name} ({rename_counter}){file_path.suffix}"
+                    rename_counter += 1
 
-    print(f"Time to process all files: {round(perf_counter()-end_setup, 2)} seconds")
+                os.rename(src=song_path, dst=renamed_path) ## side-effect
 
-
-    print(f"Total time get raw jsons: {round(get_raw_time, 2)} seconds")
-
-    print(f"Total time to generate hashes: {round(hash_generating_time, 2)} seconds")
+    logger.debug(f"Time to process all files: {round(perf_counter()-end_setup, 2)} seconds")
 
     seen_hjson_count = sum(1 for hjson_struct in lookup_table.values() if hjson_struct.seen is True) 
 

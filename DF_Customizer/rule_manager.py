@@ -3,7 +3,7 @@
 import re
 from typing import Final
 
-from song_metadata import MetadataFields, SongMetadata
+from DF_Customizer.song_metadata import MetadataFields, SongMetadata
 
 
 class RuleManager:

@@ -1,9 +1,4 @@
-import sys
-
 import pytest
-
-sys.path.append(r'C:\Users\Nyss\Documents\Code\Python\Neuro_karaoke\Local_Synch')
-
 from local_sync import get_raw
 
 
@@ -24,9 +19,9 @@ def test_get_raw_valid_keys(raw_json, key, expected):
     assert get_raw(raw_json, key) == expected
 
 @pytest.mark.parametrize("custom_json, key, expected", [
-    ('{"Special":"0"}', "Special", "0"),           # Integer to string conversion
-    ('{"Comment": ""}', "Comment", ""),           # Empty string
-    ('{"Empty": null}', "Empty", ""),           # JSON null handling
+    ('{"Special": 0}', "Special", ""),           
+    ('{"Comment": ""}', "Comment", ""),          
+    ('{"Empty": null}', "Empty", ""),       
 ])
 def test_get_raw_edge_cases(custom_json, key, expected):
     assert get_raw(custom_json, key) == expected

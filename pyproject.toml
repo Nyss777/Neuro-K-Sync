@@ -1,0 +1,18 @@
+[project]
+name = "local-synch"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "hjson>=3.1.0",
+    "mutagen>=1.47.0",
+    "pillow>=12.1.0",
+    "polars[rtcompat]>=1.37.1",
+    "requests>=2.32.5",
+    "tinytag>=2.2.0",
+    "utils",
+]
+
+[tool.uv.sources]
+utils = { workspace = true, editable = true }

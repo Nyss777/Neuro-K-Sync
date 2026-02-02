@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import cast
 
 import hjson
-from file_manager import FileManager
-from rule_manager import RuleManager
-from song_utils import write_id3_tags
+from DF_Customizer.file_manager import FileManager
+from DF_Customizer.rule_manager import RuleManager
+from DF_Customizer.song_utils import write_id3_tags
 
 logger = logging.getLogger(__name__)
 
