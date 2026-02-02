@@ -15,4 +15,4 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-utils = { workspace = true, editable = true }
+utils = { workspace = true }
