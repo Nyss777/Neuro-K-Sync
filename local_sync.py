@@ -2,42 +2,37 @@ import argparse
 import io
 import logging
 import os
+import re
 import sys
 import zipfile
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from time import perf_counter
 from typing import cast
 
 import hjson
 import requests
-from CF_Program import Song, get_song_data, process_new_tags, set_tags
+from CF_Program import Song, process_new_tags, set_tags_fast
 from create_hjsons import create_payload_from_dict
 from DF_formatter import apply_in_background, load_preset
-from engraver import engrave_payload, get_all_mp3
+from engraver import engrave_payload_fast, get_all_mp3, get_raw_json
 from file_manager import FileManager
 from hash_mutagen import get_audio_hash
 
 
-def format_tags(file_path: str, script_dir: Path, song_obj: Song) -> None:
-    if not DF_format(file_path, script_dir):
-        set_tags(song_path, song_obj, None, None)
+def format_tags(file_path: str, script_dir: Path, song_obj: Song, preset: dict[str, list[dict[str, str]]] | None) -> None:
+    if not DF_format(file_path, script_dir, preset):
+        set_tags_fast(song_path, song_obj, None, None)
 
-def DF_format (file_path: str, script_dir: Path) -> bool:
+def DF_format (file_path: str, script_dir: Path, preset: dict[str, list[dict[str, str]]] | None) -> bool:
     """
     Function for formatting a song with a DF preset
     """
-    presets = get_all_json(script_dir)
-
-    if not presets:
+    if preset is None:
         return False
 
-    try :
-        preset = load_preset(presets[0])
-
-        if preset is None:
-            return False
-
+    try:
         apply_in_background(file_path=file_path, fm=FileManager(), preset=preset)
 
     except Exception:
@@ -46,6 +41,26 @@ def DF_format (file_path: str, script_dir: Path) -> bool:
 
     else:
         return True
+
+def setup_preset(script_dir: Path) -> dict[str, list[dict[str, str]]] | None:
+
+    presets = get_all_json(script_dir)
+
+    if not presets:
+        return
+
+    try :
+        preset = load_preset(presets[0])
+
+        if preset is None:
+            return
+
+    except Exception:
+        logger.exception("Unable to load with preset!")
+        return
+
+    else:
+        return preset
 
 def get_all_json(p: Path) -> list[Path]: 
     """
@@ -193,13 +208,25 @@ def setup_parser() -> argparse.Namespace:
 
     return parser.parse_args()
 
+def get_raw(json: str, key: str) -> str: # test if this works
 
+    pattern = f"\"{key}\":\"(.*?)\""
+
+    match = re.search(pattern, json)
+
+    if match is None:
+        return ""
+    else:
+        return match.group(1)
+ 
 @dataclass
 class Hjson_Struct:
     metadata: dict[str, str | int | float]
     seen: bool
 
 if __name__ == "__main__":
+
+    start = perf_counter()
 
     setup_logger()
 
@@ -230,6 +257,8 @@ if __name__ == "__main__":
 
     path_config_file = script_dir / "path_config.txt"
 
+    preset = setup_preset(script_dir)
+
     songs_directory_path = get_songs_directory(path_config_file, args)
 
     if songs_directory_path is None:
@@ -245,14 +274,26 @@ if __name__ == "__main__":
         logger.critical("No song files found, please verify path")
         exit()
 
+    end_setup = perf_counter()
+    print(f"Time to setup: {round(end_setup-start, 2)} seconds")
+
+    get_raw_time = 0
+    hash_generating_time = 0
+
     changed = 0
     for song_path in song_files:
-        payload, song_data, _ = get_song_data(song_path)
+        get_raw_start = perf_counter()
+        payload = get_raw_json(song_path)
+        get_raw_time += (perf_counter() - get_raw_start)
 
-        xxhash_value = song_data.get("xxHash", None) ## If this is too slow maybe use regex on the payload
+        xxhash_value = get_raw(payload, "xxHash")
 
         if not xxhash_value:
-            xxhash_value = get_audio_hash(song_path)
+            h_start = perf_counter()
+            xxhash_value = get_audio_hash(song_path) # This takes a looooog time
+            hash_generating_time += (perf_counter() - h_start)
+
+
         if not xxhash_value:
             logger.warning(f"Unable to get xxhash for {song_path}")
             continue
@@ -264,36 +305,47 @@ if __name__ == "__main__":
         else:
             hjson_data_struct.seen = True
         
+        new_song_data = {k : v if isinstance(v, str) else f"{v}" for k, v in hjson_data_struct.metadata.items()}
+
         copy = False
-        for key in hjson_data_struct.metadata:
-            if song_data.get(key, "") != str(hjson_data_struct.metadata[key]):
+        for key, value in new_song_data.items():
+            if get_raw(payload, key) != value:
                 copy = True
                 changed += 1
                 break
 
-        if copy: 
+
+        if copy: # 110 seconds
 
             file_path = Path(song_path)
 
             new_payload = create_payload_from_dict(hjson_data=hjson_data_struct.metadata, song_path=song_path, filename=file_path.stem)
-            engrave_payload(path=song_path, song_data=new_payload) ## side-effect
+
+            engrave_payload_fast(path=song_path, song_data=new_payload) ## side-effect # 4 seconds fast
 
             song_obj = Song(song_path)
-            process_new_tags(song_obj)
+            process_new_tags(song_obj, song_data=new_song_data)
 
-            format_tags(song_path, script_dir, song_obj) ## side-effect
+            format_tags(song_path, script_dir, song_obj, preset) ## side-effect # 64 seconds # 44 for DF # 110 for fast ???
+            ### commented out for testing
+            # if song_obj.filename != file_path.stem:
 
-            if song_obj.filename != file_path.stem:
-                
-                renamed_path = file_path.parent / song_obj.filename
-                rename_counter = 1
-                base_name = song_obj.filename
+            #     renamed_path = file_path.parent / song_obj.filename
+            #     rename_counter = 1
+            #     base_name = song_obj.filename
 
-                while renamed_path.is_file():
-                    renamed_path = file_path.parent / f"{base_name} ({rename_counter}){file_path.suffix}"
-                    rename_counter += 1
+            #     while renamed_path.is_file():
+            #         renamed_path = file_path.parent / f"{base_name} ({rename_counter}){file_path.suffix}"
+            #         rename_counter += 1
 
-                os.rename(src=song_path, dst=renamed_path) ## side-effect
+            #     os.rename(src=song_path, dst=renamed_path) ## side-effect
+
+    print(f"Time to process all files: {round(perf_counter()-end_setup, 2)} seconds")
+
+
+    print(f"Total time get raw jsons: {round(get_raw_time, 2)} seconds")
+
+    print(f"Total time to generate hashes: {round(hash_generating_time, 2)} seconds")
 
     seen_hjson_count = sum(1 for hjson_struct in lookup_table.values() if hjson_struct.seen is True) 
 
