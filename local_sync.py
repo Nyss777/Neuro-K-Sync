@@ -23,7 +23,7 @@ from utils.hash_mutagen import get_audio_hash
 
 def format_tags(file_path: str, script_dir: Path, song_obj: Song, preset: dict[str, list[dict[str, str]]] | None) -> None:
     if not DF_format(file_path, script_dir, preset):
-        set_tags_fast(song_path, song_obj, None, None)
+        set_tags_fast(file_path, song_obj, None, None)
 
 def DF_format (file_path: str, script_dir: Path, preset: dict[str, list[dict[str, str]]] | None) -> bool:
     """
@@ -224,6 +224,33 @@ class Hjson_Struct:
     metadata: dict[str, str | int | float]
     seen: bool
 
+class Song_Struct:
+
+    raw_payload: str = '' 
+    xxhash: str | None = None
+    hjson_data_struct: Hjson_Struct | None = None
+    new_song_data: dict[str, str] | None = None
+    copy: bool = False
+    new_payload: str | None = None
+    song_obj: Song
+
+    def __init__(self, path: Path | str) -> None:
+        self.file_path = Path(path)
+        self.song_obj = Song(path)
+
+    def rename_file(self) -> None:
+        if self.song_obj.filename != self.file_path.stem:
+
+            renamed_path = self.file_path.parent / self.song_obj.filename
+            rename_counter = 1
+            base_name = self.song_obj.filename
+
+            while renamed_path.is_file():
+                renamed_path = self.file_path.parent / f"{base_name} ({rename_counter}){self.file_path.suffix}"
+                rename_counter += 1
+
+            os.rename(src=self.file_path, dst=renamed_path) ## side-effect
+
 if __name__ == "__main__":
 
     start = perf_counter()
@@ -277,42 +304,46 @@ if __name__ == "__main__":
     end_setup = perf_counter()
     print(f"Time to setup: {round(end_setup-start, 2)} seconds")
 
-    get_raw_time = 0
-    hash_generating_time = 0
-
     changed = 0
-    for song_path in song_files:
-        get_raw_start = perf_counter()
-        payload = get_raw_json(song_path)
-        get_raw_time += (perf_counter() - get_raw_start)
 
-        xxhash_value = get_raw(payload, "xxHash")
+    song_structs = [Song_Struct(song_path) for song_path in song_files]
 
-        if not xxhash_value:
-            h_start = perf_counter()
-            xxhash_value = get_audio_hash(song_path) # This takes a looooog time
-            hash_generating_time += (perf_counter() - h_start)
+    get_raw_start = perf_counter()
 
+    for ss in song_structs:
+        ss.raw_payload = get_raw_json(ss.file_path)
 
-        if not xxhash_value:
-            logger.warning(f"Unable to get xxhash for {song_path}")
-            continue
+    print(f"Total time get raw jsons: {round(perf_counter() - get_raw_start, 2)} seconds")
+
+    for ss in song_structs:
+        ss.xxhash = get_raw(ss.raw_payload, "xxHash")
+
+    h_start = perf_counter()
+
+    for ss in song_structs:
+        if not ss.xxhash:
+            ss.xxhash = get_audio_hash(str(ss.file_path)) # This takes a looooog time
+
+    print(f"Total time to generate hashes: {round(perf_counter() - h_start, 2)} seconds")
+
+    for ss in song_structs:
+        if ss.xxhash:
+            ss.hjson_data_struct = lookup_table.get(ss.xxhash)
+
+        if ss.hjson_data_struct is not None:
+            ss.hjson_data_struct.seen = True
         
-        hjson_data_struct = lookup_table.get(xxhash_value)
+    for ss in song_structs:
+        if ss.hjson_data_struct is not None:
+            ss.new_song_data = {k : v if isinstance(v, str) else f"{v}" for k, v in ss.hjson_data_struct.metadata.items()}
 
-        if hjson_data_struct is None:
-            continue
-        else:
-            hjson_data_struct.seen = True
-        
-        new_song_data = {k : v if isinstance(v, str) else f"{v}" for k, v in hjson_data_struct.metadata.items()}
-
-        copy = False
-        for key, value in new_song_data.items():
-            if get_raw(payload, key) != value:
-                copy = True
-                changed += 1
-                break
+    for ss in song_structs:
+        if ss.new_song_data is not None:
+            for key, value in ss.new_song_data.items():
+                if get_raw(ss.raw_payload, key) != value:
+                    ss.copy = True
+                    changed += 1
+                    break
 
 
         if copy:
