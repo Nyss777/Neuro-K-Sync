@@ -3,10 +3,8 @@ import io
 import logging
 import os
 import re
-import sys
 import zipfile
 from dataclasses import dataclass
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from time import perf_counter
 from typing import cast
@@ -21,6 +19,7 @@ from ..metadata_utils.hash_mutagen import get_audio_hash
 from .DF_Customizer.file_manager import FileManager
 from .DF_formatter import apply_in_background, load_preset
 
+logger = logging.getLogger(__name__)
 
 def format_tags(file_path: str, script_dir: Path, song_obj: Song, preset: dict[str, list[dict[str, str]]] | None) -> None:
     if not DF_format(file_path, script_dir, preset):
@@ -178,38 +177,13 @@ def save_path(path_config_file: Path, directory: Path) -> None:
     except PermissionError:
         logger.error("Permission Error. Unable to save path to disk.")
 
-def setup_logger():
-
-    logger = logging.getLogger()
-
-    script_dir = Path(__file__).parent.absolute()
-
-    log_path = script_dir / 'sync_log.txt'
-
-    logger.setLevel(logging.DEBUG)
-
-    file_formatter = logging.Formatter('[%(asctime)s]%(name)s-%(levelname)s:%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    shell_formatter = logging.Formatter('%(levelname)s: %(message)s')
-
-    file_handler = RotatingFileHandler(log_path, maxBytes=5_242_880, backupCount=3, encoding='utf-8')
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(file_formatter)
-
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.INFO)
-    stream_handler.setFormatter(shell_formatter)
-
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
-    return logger
-
 def setup_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Neuro Karaoke Archive metadata synchronizer.") 
     parser.add_argument("--path", type=str, default='', help="Path to Archive")
 
     return parser.parse_args()
 
-def get_raw(json: str, key: str) -> str: # test if this works
+def get_raw(json: str, key: str) -> str:
 
     pattern = f"\"{key}\":\"(.*?)\""
 
@@ -238,30 +212,23 @@ class Song_Struct:
         self.file_path = Path(path)
         self.song_obj = Song(path)
 
-    def rename_file(self) -> None:
+    def generate_new_path(self) -> Path:
         if self.song_obj.filename != self.file_path.stem:
 
             renamed_path = self.file_path.parent / self.song_obj.filename
             rename_counter = 1
-            base_name = self.song_obj.filename
+            base_name = Path(self.song_obj.filename).stem
 
             while renamed_path.is_file():
                 renamed_path = self.file_path.parent / f"{base_name} ({rename_counter}){self.file_path.suffix}"
                 rename_counter += 1
 
-            os.rename(src=self.file_path, dst=renamed_path) ## side-effect
+            return renamed_path
+            
+        return self.file_path
         
 
-if __name__ == "__main__":
-
-    setup_logger()
-
-    if getattr(sys, 'frozen', False):
-        script_dir = Path(sys.executable).parent
-    else:
-        script_dir = Path(__file__).parent.absolute()
-
-    logger = logging.getLogger("Neuro K Archive Sync")
+def main(script_dir: Path) -> None: 
 
     logger.info("Run start")
 
@@ -309,7 +276,7 @@ if __name__ == "__main__":
     for song in song_structs:
 
         song.raw_payload = get_raw_json(song.file_path)
-
+        
         song.xxhash = get_raw(song.raw_payload, "xxHash")
 
         if not song.xxhash:
@@ -350,7 +317,7 @@ if __name__ == "__main__":
 
         format_tags(str(song.file_path), script_dir, song.song_obj, preset)
 
-        song.rename_file()
+        os.rename(song.file_path, song.generate_new_path())
 
     logger.info("Run Ended")
 
