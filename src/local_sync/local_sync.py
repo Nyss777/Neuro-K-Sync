@@ -3,10 +3,8 @@ import io
 import logging
 import os
 import re
-import sys
 import zipfile
 from dataclasses import dataclass
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from time import perf_counter
 from typing import cast
@@ -21,6 +19,7 @@ from ..metadata_utils.hash_mutagen import get_audio_hash
 from .DF_Customizer.file_manager import FileManager
 from .DF_formatter import apply_in_background, load_preset
 
+logger = logging.getLogger(__name__)
 
 def format_tags(file_path: str, script_dir: Path, song_obj: Song, preset: dict[str, list[dict[str, str]]] | None) -> None:
     if not DF_format(file_path, script_dir, preset):
@@ -178,31 +177,6 @@ def save_path(path_config_file: Path, directory: Path) -> None:
     except PermissionError:
         logger.error("Permission Error. Unable to save path to disk.")
 
-def setup_logger():
-
-    logger = logging.getLogger()
-
-    script_dir = Path(__file__).parent.absolute()
-
-    log_path = script_dir / 'sync_log.txt'
-
-    logger.setLevel(logging.DEBUG)
-
-    file_formatter = logging.Formatter('[%(asctime)s]%(name)s-%(levelname)s:%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    shell_formatter = logging.Formatter('%(levelname)s: %(message)s')
-
-    file_handler = RotatingFileHandler(log_path, maxBytes=5_242_880, backupCount=3, encoding='utf-8')
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(file_formatter)
-
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.INFO)
-    stream_handler.setFormatter(shell_formatter)
-
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
-    return logger
-
 def setup_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Neuro Karaoke Archive metadata synchronizer.") 
     parser.add_argument("--path", type=str, default='', help="Path to Archive")
@@ -252,16 +226,7 @@ class Song_Struct:
             os.rename(src=self.file_path, dst=renamed_path) ## side-effect
         
 
-if __name__ == "__main__":
-
-    setup_logger()
-
-    if getattr(sys, 'frozen', False):
-        script_dir = Path(sys.executable).parent
-    else:
-        script_dir = Path(__file__).parent.absolute()
-
-    logger = logging.getLogger("Neuro K Archive Sync")
+def main(script_dir: Path) -> None: 
 
     logger.info("Run start")
 
