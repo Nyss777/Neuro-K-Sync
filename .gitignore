@@ -6,6 +6,7 @@ env/
 # Ignore compiled Python files
 __pycache__/
 *.py[cod]
+.pytest_cache
 
 # Ignore log files (like the sync [date].log you created earlier!)
 *.log

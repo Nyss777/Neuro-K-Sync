@@ -226,12 +226,11 @@ class Hjson_Struct:
 
 class Song_Struct:
 
-    raw_payload: str = '' 
-    xxhash: str | None = None
-    hjson_data_struct: Hjson_Struct | None = None
-    new_song_data: dict[str, str] | None = None
+    raw_payload: str 
+    xxhash: str | None
+    new_song_data: dict[str, str]
     copy: bool = False
-    new_payload: str | None = None
+    new_payload: str
     song_obj: Song
 
     def __init__(self, path: Path | str) -> None:
@@ -250,6 +249,7 @@ class Song_Struct:
                 rename_counter += 1
 
             os.rename(src=self.file_path, dst=renamed_path) ## side-effect
+        
 
 if __name__ == "__main__":
 
@@ -308,70 +308,53 @@ if __name__ == "__main__":
 
     song_structs = [Song_Struct(song_path) for song_path in song_files]
 
-    get_raw_start = perf_counter()
+    for song in song_structs:
 
-    for ss in song_structs:
-        ss.raw_payload = get_raw_json(ss.file_path)
+        song.raw_payload = get_raw_json(song.file_path)
 
-    print(f"Total time get raw jsons: {round(perf_counter() - get_raw_start, 2)} seconds")
+        song.xxhash = get_raw(song.raw_payload, "xxHash")
 
-    for ss in song_structs:
-        ss.xxhash = get_raw(ss.raw_payload, "xxHash")
+        if not song.xxhash:
+            song.xxhash = get_audio_hash(str(song.file_path)) # This takes a looooog time
 
-    h_start = perf_counter()
+        if song.xxhash is None:
+            continue
+            
+        hjson_data_struct = lookup_table.get(song.xxhash)
 
-    for ss in song_structs:
-        if not ss.xxhash:
-            ss.xxhash = get_audio_hash(str(ss.file_path)) # This takes a looooog time
+        if hjson_data_struct is None:
+            continue
 
-    print(f"Total time to generate hashes: {round(perf_counter() - h_start, 2)} seconds")
+        else:
+            hjson_data_struct.seen = True
 
-    for ss in song_structs:
-        if ss.xxhash:
-            ss.hjson_data_struct = lookup_table.get(ss.xxhash)
+        song.new_song_data = {k : v if isinstance(v, str) else f"{v}" for k, v in hjson_data_struct.metadata.items()}
 
-        if ss.hjson_data_struct is not None:
-            ss.hjson_data_struct.seen = True
-        
-    for ss in song_structs:
-        if ss.hjson_data_struct is not None:
-            ss.new_song_data = {k : v if isinstance(v, str) else f"{v}" for k, v in ss.hjson_data_struct.metadata.items()}
+        for key, value in song.new_song_data.items():
+            if get_raw(song.raw_payload, key) != value:
+                song.copy = True
+                changed += 1
+                break
 
-    for ss in song_structs:
-        if ss.new_song_data is not None:
-            for key, value in ss.new_song_data.items():
-                if get_raw(ss.raw_payload, key) != value:
-                    ss.copy = True
-                    changed += 1
-                    break
+        if not song.copy:
+            continue
+
+        song.new_payload = create_payload_from_dict(
+                        hjson_data=hjson_data_struct.metadata, 
+                        song_path=str(song.file_path), 
+                        filename=song.file_path.stem
+                        )
 
 
-        if copy:
+        engrave_payload(path=str(song.file_path), song_data=song.new_payload)
 
-            file_path = Path(song_path)
+        process_new_tags(song.song_obj, song_data=song.new_song_data)
 
-            new_payload = create_payload_from_dict(hjson_data=hjson_data_struct.metadata, song_path=song_path, filename=file_path.stem)
+        format_tags(str(song.file_path), script_dir, song.song_obj, preset)
 
-            # engrave_payload(path=song_path, song_data=new_payload) ## side-effect
+        song.rename_file()
 
-            song_obj = Song(song_path)
-            process_new_tags(song_obj, song_data=new_song_data)
-
-            # format_tags(song_path, script_dir, song_obj, preset) ## side-effect
-
-            if song_obj.filename != file_path.stem:
-
-                renamed_path = file_path.parent / song_obj.filename
-                rename_counter = 1
-                base_name = song_obj.filename
-
-                while renamed_path.is_file():
-                    renamed_path = file_path.parent / f"{base_name} ({rename_counter}){file_path.suffix}"
-                    rename_counter += 1
-
-                os.rename(src=song_path, dst=renamed_path) ## side-effect
-
-    logger.debug(f"Time to process all files: {round(perf_counter()-end_setup, 2)} seconds")
+    print(f"Time to process all files: {round(perf_counter()-end_setup, 2)} seconds")
 
     seen_hjson_count = sum(1 for hjson_struct in lookup_table.values() if hjson_struct.seen is True) 
 
