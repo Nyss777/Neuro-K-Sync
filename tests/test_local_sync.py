@@ -1,5 +1,5 @@
 import pytest
-from local_sync import get_raw
+from src.local_sync.local_sync import get_raw
 
 
 @pytest.fixture

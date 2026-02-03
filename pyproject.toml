@@ -9,7 +9,10 @@ dependencies = [
     "mutagen>=1.47.0",
     "pillow>=12.1.0",
     "polars[rtcompat]>=1.37.1",
+    "pytest>=9.0.2",
     "requests>=2.32.5",
     "tinytag>=2.2.0",
-    "utils",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
