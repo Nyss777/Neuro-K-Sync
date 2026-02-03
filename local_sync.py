@@ -306,7 +306,7 @@ if __name__ == "__main__":
 
     changed = 0
 
-    song_structs = [Song_Struct(song_path) for song_path in song_files]
+    song_structs = (Song_Struct(song_path) for song_path in song_files)
 
     for song in song_structs:
 
