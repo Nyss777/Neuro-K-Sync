@@ -212,18 +212,20 @@ class Song_Struct:
         self.file_path = Path(path)
         self.song_obj = Song(path)
 
-    def rename_file(self) -> None:
+    def generate_new_path(self) -> Path:
         if self.song_obj.filename != self.file_path.stem:
 
             renamed_path = self.file_path.parent / self.song_obj.filename
             rename_counter = 1
-            base_name = self.song_obj.filename
+            base_name = Path(self.song_obj.filename).stem
 
             while renamed_path.is_file():
                 renamed_path = self.file_path.parent / f"{base_name} ({rename_counter}){self.file_path.suffix}"
                 rename_counter += 1
 
-            os.rename(src=self.file_path, dst=renamed_path) ## side-effect
+            return renamed_path
+            
+        return self.file_path
         
 
 def main(script_dir: Path) -> None: 
@@ -274,7 +276,7 @@ def main(script_dir: Path) -> None:
     for song in song_structs:
 
         song.raw_payload = get_raw_json(song.file_path)
-
+        
         song.xxhash = get_raw(song.raw_payload, "xxHash")
 
         if not song.xxhash:
@@ -315,7 +317,7 @@ def main(script_dir: Path) -> None:
 
         format_tags(str(song.file_path), script_dir, song.song_obj, preset)
 
-        song.rename_file()
+        # os.rename(song.file_path, song.generate_new_path())
 
     logger.info("Run Ended")
 
