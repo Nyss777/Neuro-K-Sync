@@ -5,8 +5,9 @@ import re
 from pathlib import Path
 
 import polars as pl
-from DF_Customizer import song_utils
-from DF_Customizer.song_metadata import MetadataFields, SongMetadata
+
+from . import song_utils
+from .song_metadata import MetadataFields, SongMetadata
 
 
 class FileManager:

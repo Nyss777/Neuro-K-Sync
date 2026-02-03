@@ -13,12 +13,13 @@ from typing import cast
 
 import hjson
 import requests
-from DF_Customizer.file_manager import FileManager
-from DF_formatter import apply_in_background, load_preset
-from utils.CF_Program import Song, process_new_tags, set_tags_fast
-from utils.create_hjsons import create_payload_from_dict
-from utils.engraver import engrave_payload, get_all_mp3, get_raw_json
-from utils.hash_mutagen import get_audio_hash
+
+from ..metadata_utils.CF_Program import Song, process_new_tags, set_tags_fast
+from ..metadata_utils.create_hjsons import create_payload_from_dict
+from ..metadata_utils.engraver import engrave_payload, get_all_mp3, get_raw_json
+from ..metadata_utils.hash_mutagen import get_audio_hash
+from .DF_Customizer.file_manager import FileManager
+from .DF_formatter import apply_in_background, load_preset
 
 
 def format_tags(file_path: str, script_dir: Path, song_obj: Song, preset: dict[str, list[dict[str, str]]] | None) -> None:
@@ -253,8 +254,6 @@ class Song_Struct:
 
 if __name__ == "__main__":
 
-    start = perf_counter()
-
     setup_logger()
 
     if getattr(sys, 'frozen', False):
@@ -301,8 +300,7 @@ if __name__ == "__main__":
         logger.critical("No song files found, please verify path")
         exit()
 
-    end_setup = perf_counter()
-    print(f"Time to setup: {round(end_setup-start, 2)} seconds")
+    start_processing = perf_counter()
 
     changed = 0
 
@@ -354,11 +352,12 @@ if __name__ == "__main__":
 
         song.rename_file()
 
-    print(f"Time to process all files: {round(perf_counter()-end_setup, 2)} seconds")
+    logger.info("Run Ended")
+
+    logger.info(f"Time to process all files: {round(perf_counter()-start_processing, 2)} seconds")
 
     seen_hjson_count = sum(1 for hjson_struct in lookup_table.values() if hjson_struct.seen is True) 
 
-    logger.info("Run End")
     if changed == 0:
         logger.info("No song was changed")
     else:
