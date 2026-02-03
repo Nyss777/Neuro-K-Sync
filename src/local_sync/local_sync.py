@@ -183,7 +183,7 @@ def setup_parser() -> argparse.Namespace:
 
     return parser.parse_args()
 
-def get_raw(json: str, key: str) -> str: # test if this works
+def get_raw(json: str, key: str) -> str:
 
     pattern = f"\"{key}\":\"(.*?)\""
 
@@ -317,7 +317,7 @@ def main(script_dir: Path) -> None:
 
         format_tags(str(song.file_path), script_dir, song.song_obj, preset)
 
-        # os.rename(song.file_path, song.generate_new_path())
+        os.rename(song.file_path, song.generate_new_path())
 
     logger.info("Run Ended")
 
