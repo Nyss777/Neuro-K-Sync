@@ -43,3 +43,5 @@ if __name__ == "__main__":
     except Exception:
         logging.exception("The application crashed due to an unhandled exception:")
         sys.exit(1)
+
+    input("\nPress Enter to close this window.")
