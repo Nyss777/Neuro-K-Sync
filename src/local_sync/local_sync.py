@@ -69,7 +69,7 @@ def get_all_json(p: Path) -> list[Path]:
     return [(f) for f in p.rglob('*.json') if f.is_file()]
 
 def get_remote_zip() -> io.BytesIO | None:
-    url = "https://github.com/Nyss777/Neuro-Karaoke-Archive-Metadata/raw/main/zipped_metadata.zip"
+    url = "https://github.com/Nyss777/Neuro-Karaoke-Archive-Metadata/releases/download/latest/metadata-zip.zip"
 
     try:    
 
