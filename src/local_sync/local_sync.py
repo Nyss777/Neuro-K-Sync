@@ -69,7 +69,7 @@ def get_all_json(p: Path) -> list[Path]:
     return [(f) for f in p.rglob('*.json') if f.is_file()]
 
 def get_remote_zip() -> io.BytesIO | None:
-    url = "https://github.com/Nyss777/Neuro-Karaoke-Archive-Metadata/raw/main/zipped_metadata.zip"
+    url = "https://github.com/Nyss777/Neuro-Karaoke-Archive-Metadata/releases/download/latest/metadata-zip.zip"
 
     try:    
 
@@ -261,8 +261,10 @@ def main(script_dir: Path) -> None:
     save_path(path_config_file, songs_directory_path)
 
     song_files = get_all_mp3(songs_directory_path)
-    if len(song_files) > 0:
-        logger.info(f"Songs Found: {len(song_files)}")
+    song_amount = len(song_files)
+
+    if song_amount > 0:
+        logger.info(f"Songs Found: {song_amount}")
     else:
         logger.critical("No song files found, please verify path")
         exit()
@@ -271,9 +273,12 @@ def main(script_dir: Path) -> None:
 
     changed = 0
 
-    song_structs = (Song_Struct(song_path) for song_path in song_files)
+    song_structs = ((i, Song_Struct(song_path)) for i, song_path in enumerate(song_files))
 
-    for song in song_structs:
+    song_update_threashold = int(song_amount / 100) if song_amount > 100 else 1
+    update_indexes = set(n for n in range(song_amount, song_update_threashold))
+
+    for i, song in song_structs:
 
         song.raw_payload = get_raw_json(song.file_path)
         
@@ -318,6 +323,11 @@ def main(script_dir: Path) -> None:
         format_tags(str(song.file_path), script_dir, song.song_obj, preset)
 
         os.rename(song.file_path, song.generate_new_path())
+
+        if i in update_indexes:
+            print(f"Files processed: {i+1}/{song_amount}", end='\r', flush=True)
+            
+    print(f"Files processed: {song_amount}/{song_amount}")
 
     logger.info("Run Ended")
 
