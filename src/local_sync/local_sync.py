@@ -11,11 +11,11 @@ from typing import cast
 
 import hjson
 import requests
+from metadata_utils.CF_Program import Song, process_new_tags, set_tags_fast
+from metadata_utils.create_hjsons import create_payload_from_dict
+from metadata_utils.engraver import engrave_payload, get_all_mp3, get_raw_json
+from metadata_utils.hash_mutagen import get_audio_hash
 
-from ..metadata_utils.CF_Program import Song, process_new_tags, set_tags_fast
-from ..metadata_utils.create_hjsons import create_payload_from_dict
-from ..metadata_utils.engraver import engrave_payload, get_all_mp3, get_raw_json
-from ..metadata_utils.hash_mutagen import get_audio_hash
 from .DF_Customizer.file_manager import FileManager
 from .DF_formatter import apply_in_background, load_preset
 
