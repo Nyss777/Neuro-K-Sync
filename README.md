@@ -12,7 +12,7 @@ This is a lightweight program that checks the metadata of your [Neuro Karaoke Ar
 2. Select the directory containing the karaoke files (The program will remember the chosen path after the first time);
 3. Watch the terminal for progress;
 
-To use a DF-Customizer preset, simply put it the folder with the `.exe`
+To use a DF-Customizer preset, simply put the preset in the folder with the  `.exe`
 
 >You may pass a directory as an `--path` argument. e.g.: `Neuro_K_Sync.exe --path "path/to/directory"`
 
