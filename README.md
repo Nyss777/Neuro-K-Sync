@@ -4,7 +4,7 @@
 ## This is a tool made to update your Neuro karaoke songs with the latest metadata
 
 
-This is a lightweight program that checks the metadata of your [Neuro Karaoke Archive](https://drive.google.com/drive/folders/1B1VaWp-mCKk15_7XpFnImsTdBJPOGx7a) files and syncs them with the [Metadata Repository](https://github.com/Nyss777/Neuro-Karaoke-Archive-Metadata). Is is compatible with [DF-Customizer](https://github.com/gamerturuu/df-metadata-customizer/releases/latest) presets.
+This is a lightweight program that checks the metadata of your [Neuro Karaoke Archive](https://drive.google.com/drive/folders/1B1VaWp-mCKk15_7XpFnImsTdBJPOGx7a) files and syncs them with the [Metadata Repository](https://github.com/Nyss777/Neuro-Karaoke-Archive-Metadata). It is compatible with [DF-Customizer](https://github.com/gamerturuu/df-metadata-customizer/releases/latest) presets.
 
 ## How to use:
 
