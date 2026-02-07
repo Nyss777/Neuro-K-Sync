@@ -89,18 +89,22 @@ wheels = [
 ]
 
 [[package]]
-name = "local-synch"
+name = "local-sync"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "hjson" },
     { name = "mutagen" },
     { name = "pillow" },
     { name = "polars", extra = ["rtcompat"] },
-    { name = "pytest" },
     { name = "requests" },
     { name = "tinytag" },
     { name = "xxhash" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
 ]
 
 [package.metadata]
@@ -109,11 +113,13 @@ requires-dist = [
     { name = "mutagen", specifier = ">=1.47.0" },
     { name = "pillow", specifier = ">=12.1.0" },
     { name = "polars", extras = ["rtcompat"], specifier = ">=1.37.1" },
-    { name = "pytest", specifier = ">=9.0.2" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "tinytag", specifier = ">=2.2.0" },
     { name = "xxhash", specifier = ">=3.6.0" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.2" }]
 
 [[package]]
 name = "mutagen"

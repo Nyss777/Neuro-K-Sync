@@ -1,5 +1,9 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "local-synch"
+name = "local-sync"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -9,11 +13,18 @@ dependencies = [
     "mutagen>=1.47.0",
     "pillow>=12.1.0",
     "polars[rtcompat]>=1.37.1",
-    "pytest>=9.0.2",
     "requests>=2.32.5",
     "tinytag>=2.2.0",
     "xxhash>=3.6.0",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/metadata_utils", "src/local_sync"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
