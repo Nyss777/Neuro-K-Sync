@@ -3,7 +3,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from .local_sync import main
+from local_sync.local_sync import main
 
 
 def setup_logger(script_dir: Path):
